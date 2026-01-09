@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <title>Автоматическая диктовка</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f4f4f9;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        #notification {
+            font-size: 18px;
+            height: 50px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #animatedText {
+            font-weight: bold;
+            font-size: 20px;
+        }
+
+        #transcript {
+            margin-top: 20px;
+            min-height: 50px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px;
+            text-align: left;
+            background: #fff;
+            white-space: pre-wrap;
+        }
+        
+        #saveAndCloseBtn {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        
+        #saveAndCloseBtn:hover {
+            background-color: #45a049;
+        }
+        
+        #saveAndCloseBtn:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <h1>Автоматическая диктовка</h1>
+    <div id="notification">
+        <div id="animatedText"></div>
+    </div>
+    <div id="transcript" placeholder="Распознанный текст появится здесь..."></div>
+    <button id="saveAndCloseBtn" onclick="saveAndClose()">Сохранить и закрыть</button>
+    <script>
+        const animatedTextDiv = document.getElementById('animatedText');
+        const transcriptDiv = document.getElementById('transcript');
+        const saveAndCloseBtn = document.getElementById('saveAndCloseBtn');
+
+        const animatedWords = ["Проверка микрофона...", "Пожалуйста, подождите..."];
+        let currentAnimatedIndex = 0;
+        let recognition;
+
+        // Глобальный текст
+        let finalText = "";
+        
+        // Таймер молчания
+        let silenceTimeout;
+        const SILENCE_TIMEOUT_VALUE = 4000; // 4 секунды
+        
+        // Флаги
+        let isClosing = false;
+        
+        // Анимация
+        function startAnimation() {
+            return setInterval(() => {
+                animatedTextDiv.textContent = animatedWords[currentAnimatedIndex];
+                currentAnimatedIndex = (currentAnimatedIndex + 1) % animatedWords.length;
+            }, 1000);
+        }
+
+        let animationInterval = startAnimation();
+
+        function stopAnimation() {
+            clearInterval(animationInterval);
+        }
+
+        const testNumber = Math.floor(Math.random() * 10).toString();
+        x = testNumber;
+
+        // Проверка доступа к буферу обмена
+        async function checkClipboardAccess(x) {
+            try {
+                await navigator.clipboard.writeText(x);
+                return true;
+            } catch (err) {
+                return false;
+            }
+        }
+
+        // Функция для автоматического сохранения текста и закрытия окна
+        async function autoSaveAndClose() {
+            if (isClosing) return;
+            
+            isClosing = true;
+            
+            try {
+                // Отменяем таймер молчания, если он был запланирован
+                if (silenceTimeout) {
+                    clearTimeout(silenceTimeout);
+                }
+                
+                // Сохраняем текст в буфер обмена
+                await navigator.clipboard.writeText(finalText);
+                
+                // Закрываем окно
+                window.close();
+            } catch (err) {
+                console.error("Ошибка при автоматическом сохранении в буфер обмена:", err);
+                // Все равно закрываем окно, даже если не удалось сохранить в буфер
+                window.close();
+            }
+        }
+
+        // Функция для сохранения текста и закрытия окна (ручной вызов)
+        async function saveAndClose() {
+            if (isClosing) return;
+            
+            isClosing = true;
+            
+            // Отключаем кнопку
+            saveAndCloseBtn.disabled = true;
+            saveAndCloseBtn.textContent = "Сохранение...";
+            
+            try {
+                // Отменяем таймер молчания, если он был запланирован
+                if (silenceTimeout) {
+                    clearTimeout(silenceTimeout);
+                }
+                
+                // Сохраняем текст в буфер обмена
+                await navigator.clipboard.writeText(finalText);
+                
+                // Закрываем окно
+                window.close();
+            } catch (err) {
+                console.error("Ошибка при сохранении в буфер обмена:", err);
+                saveAndCloseBtn.textContent = "Ошибка сохранения";
+                isClosing = false;
+                saveAndCloseBtn.disabled = false;
+            }
+        }
+
+        // Сброс таймера молчания
+        function resetSilenceTimer() {
+            // Отменяем предыдущий таймер молчания
+            if (silenceTimeout) {
+                clearTimeout(silenceTimeout);
+            }
+            
+            // Устанавливаем новый таймер молчания
+            silenceTimeout = setTimeout(() => {
+                // Начинаем автоматическое сохранение и закрытие
+                autoSaveAndClose();
+            }, SILENCE_TIMEOUT_VALUE);
+        }
+
+        // Инициализация распознавания
+        async function initRecognition() {
+            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                if ('webkitSpeechRecognition' in window) {
+                    recognition = new webkitSpeechRecognition();
+                } else {
+                    recognition = new SpeechRecognition();
+                }
+            } else {
+                alert('Ваш браузер не поддерживает распознавание речи.');
+                window.close();
+                return;
+            }
+
+            recognition.lang = 'ru-RU';
+            recognition.interimResults = true;
+            recognition.continuous = true; // Непрерывное распознавание
+
+            recognition.onresult = (event) => {
+                let interimTranscript = "";
+                let hasAnyResult = false; // Флаг наличия любых результатов
+                
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        finalText += event.results[i][0].transcript + " ";
+                        hasAnyResult = true;
+                    } else {
+                        interimTranscript += event.results[i][0].transcript + " ";
+                        hasAnyResult = true; // Есть промежуточные результаты
+                    }
+                }
+                
+                transcriptDiv.textContent = finalText + interimTranscript;
+                
+                // Если были любые результаты, сбрасываем таймер молчания
+                if (hasAnyResult) {
+                    resetSilenceTimer();
+                }
+            };
+
+            recognition.onerror = () => {
+                stopAnimation();
+                animatedTextDiv.textContent = 'Ошибка распознавания речи.';
+                // Закрываем окно при ошибке
+                setTimeout(() => {
+                    window.close();
+                }, 3000);
+            };
+
+            recognition.onend = () => {
+                // При завершении распознавания просто закрываем окно
+                // Больше не перезапускаем распознавание
+                window.close();
+            };
+
+            try {
+                recognition.start();
+                // Отображаем статус активной записи
+                stopAnimation();
+                animatedTextDiv.textContent = 'Запись активна... Говорите';
+                animatedTextDiv.style.color = 'green';
+                
+                // Запускаем таймер молчания
+                resetSilenceTimer();
+            } catch (e) {
+                window.close();
+            }
+        }
+
+        // Основной запуск
+        // После успешных проверок начинаем распознавание и очищаем блок анимации
+        async function init() {
+            const hasClipboardAccess = await checkClipboardAccess();
+
+            if (!hasClipboardAccess) {
+                stopAnimation();
+                animatedTextDiv.textContent = 'Нет доступа к буферу обмена.';
+                setTimeout(() => window.close(), 3000);
+                return;
+            }
+
+            try {
+                await navigator.mediaDevices.getUserMedia({ audio: true });
+                // Все проверки пройдены, очищаем блок анимации
+                stopAnimation();
+                animatedTextDiv.textContent = ''; // делаем блок пустым
+                await initRecognition();
+            } catch (err) {
+                stopAnimation();
+                animatedTextDiv.textContent = 'Микрофон не обнаружен или отказано в доступе.';
+                setTimeout(() => window.close(), 3000);
+            }
+        }
+
+        window.onload = () => {
+            init();
+        };
+    </script>
+</body>
+</html>
